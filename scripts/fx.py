@@ -899,12 +899,26 @@ def fx_red_collage(c, e):
     red = rgb(e.o.get('color'), RED); al = fade(c, e)
     w = cached(e, 'w', lambda: fit_text(e.o.get('text', 'EDIT').upper(), c.W * 0.98, 'uib', 700, fill=red, glow=(red, 34)))
     s = 1.12 - 0.12 * ease_out(c.lt / 0.4)
-    place(c, w, c.W / 2, max(w.height * 0.42, c.fy - c.fw * 1.05), s, 0, clamp(c.lt / 0.12) * al, behind=True)
-    lines = e.o.get('lines', 'كليب واحد.|42 effect.|من غير apps.').split('|')
+    def _wpos():  # the red word sits behind you, but its letters must clear the top of your hair so the word stays readable
+        a = np.asarray(w.getchannel('A')); rows = np.where(a.max(1) > 140)[0]
+        g0, g1 = (rows[0], rows[-1]) if len(rows) else (0, w.height)
+        xa, xb = int(max(0, c.fx - c.fw * 0.7)), int(min(c.W, c.fx + c.fw * 0.7)); r_ = np.where(c.m[:, xa:xb].max(1) > 0.5)[0]
+        hair = r_[0] if len(r_) else c.fy - c.fw * 0.95
+        cy = max(w.height * 0.42, c.fy - c.fw * 1.05)
+        cy = min(cy, hair - c.H * 0.012 - (g1 - w.height / 2))  # glyph bottom just above the hair
+        sc = 1.0
+        if cy - w.height / 2 + g0 < c.H * 0.03:  # no room above the hair: shrink the word until it fits
+            sc = max(0.6, (hair - c.H * 0.012 - c.H * 0.03) / max(1, g1 - g0)); cy = hair - c.H * 0.012 - (g1 - w.height / 2) * sc
+        return cy, sc, cy - (w.height / 2 - g0) * sc
+    wcy, wsc, gtop = cached(e, 'wpos', _wpos)
+    place(c, w, c.W / 2, wcy, s * wsc, 0, clamp(c.lt / 0.12) * al, behind=True)
+    lines = e.o.get('lines', 'كليب واحد|42 effect|من غير apps').split('|')
     size = cached(e, 'sz', lambda: lines_fit(lines, c.W * 0.8, 'uib', int(c.W * 0.14)))
     y = min(max(c.H * 0.5, c.fy + c.fw * 1.55), c.H * 0.9 - size * 1.15 * len(lines))  # keep every line on screen
     if y < c.fy + c.fw * 0.9:  # face sits too low for the stack under the chin: put it above the red word instead
-        y = max(c.H * 0.04, max(w.height * 0.42, c.fy - c.fw * 1.05) - w.height * 0.42 - size * 1.05 * len(lines))
+        wtop = gtop - size * 0.25
+        size = cached(e, 'sz2', lambda: max(int(c.W * 0.06), min(size, int((wtop - c.H * 0.03) / (1.05 * len(lines))))))  # shrink the stack so it never sits on the red word
+        y = max(c.H * 0.03, wtop - size * 1.05 * len(lines))
     for j, ln in enumerate(lines):
         im = cached(e, ('l', j), lambda: text_img(ln, size, 'uib', red if j == 1 else (255, 255, 255), shadow=8))
         kk = clamp((c.lt - 0.18 - 0.13 * j) / 0.16)
@@ -956,6 +970,7 @@ def fx_split_headline(c, e):
                 x += f.getlength(' ') + (S * 0.12 if core == hl else 0)
     d.rectangle([0, ch - max(5, W // 180), W, ch], fill=col + (255,))
     comp(c, lay, 0, top - ch)
+    if not e.o.get('pill', 'في ثواني').strip(): return  # pill='' leaves the panel as the headline only
     pt = text_img(e.o.get('pill', 'في ثواني'), W * 0.034, 'uib', (255, 255, 255))
     pill = rrect(pt.width + W * 0.02, pt.height * 0.95, pt.height * 0.47, col + (255,)); pill.alpha_composite(pt, (int(W * 0.01), int(-pt.height * 0.025)))
     px_ = W * 0.07 + pill.width / 2 if any(is_ar(l) for l in lines) else W * 0.93 - pill.width / 2
@@ -1187,7 +1202,7 @@ def fx_broll_split(c, e):
 @effect('phone-fan', 'your reels fan out like a hand of phones in front of you, under a two-line headline')
 def fx_phone_fan(c, e):
     W, H = c.W, c.H; al = fade(c, e)
-    lines = e.o.get('text', '42 effect.|من غير apps مونتاج.').split('|')
+    lines = e.o.get('text', '42 effect|من غير CapCut').split('|')
     S = cached(e, 'sz', lambda: lines_fit(lines, W * 0.84, 'uib', int(W * 0.08)))
     y = max(H * 0.06, c.fy - c.fw * 1.3 - S * 1.3 * len(lines))
     for j, ln in enumerate(lines):
@@ -1429,10 +1444,11 @@ def glass_widgets_v2(c, e):
     inn = rrect(aw - 36 * u, ah - 74 * u, 20 * u, (250, 248, 244, 255)); di = ImageDraw.Draw(inn); iw, ih = inn.size
     for j in range(3): di.ellipse([14 * u + j * 16 * u, 14 * u, 24 * u + j * 16 * u, 24 * u], fill=((255, 95, 87), (255, 189, 46), (40, 200, 64))[j] + (255,))
     di.text((16 * u, 40 * u), 'أعلى الريلز', font=font('uib', 26 * u), fill=(24, 22, 26, 255))
-    di.text((16 * u, 72 * u), '197K', font=font('anton', 44 * u), fill=(200, 85, 61, 255))
-    vals = [197, 140, 124, 83, 50, 40, 38]; gx0, gx1, gy1 = 16 * u, iw - 16 * u, ih - 18 * u; bwid = (gx1 - gx0) / 7 * 0.66
+    if e.o.get('views'): di.text((16 * u, 72 * u), e.o['views'], font=font('anton', 44 * u), fill=(200, 85, 61, 255))  # only a real number you pass in
+    vals = [float(v) for v in e.o['bars'].split('|')] if e.o.get('bars') else [100, 82, 70, 56, 44, 36, 30]  # bar shapes only, no labels
+    gx0, gx1, gy1 = 16 * u, iw - 16 * u, ih - 18 * u; bwid = (gx1 - gx0) / 7 * 0.66
     for j, v in enumerate(vals):
-        q = ease_out((c.lt - 0.35 - 0.05 * j) / 0.4); hh = (ih * 0.42) * v / 197 * q; x0 = gx0 + (gx1 - gx0) * j / 7
+        q = ease_out((c.lt - 0.35 - 0.05 * j) / 0.4); hh = (ih * (0.42 if e.o.get('views') else 0.55)) * v / max(vals) * q; x0 = gx0 + (gx1 - gx0) * j / 7
         if hh > 1: di.rounded_rectangle([x0, gy1 - hh, x0 + bwid, gy1], 5 * u, fill=((242, 196, 109) if j == 0 else (200, 85, 61)) + (255,))
     art.alpha_composite(inn, (int(18 * u), int(56 * u)))
     show(art, dx, dy, 3)
@@ -1478,9 +1494,10 @@ def glass_widgets_v2(c, e):
     f1, f2 = font('uim', W * 0.045), font('uib', W * 0.045)
     pl = e.o.get('pill', 'اتعمل بـ |Claude'); pre, hi = pl.split('|', 1) if '|' in pl else (pl, '')
     tw = f1.getlength(pre) + f2.getlength(hi); ph = W * 0.105; pw = tw + ph * 0.9; py = H * 0.875
-    q = glass(c, pw, ph, ph / 2, W / 2, py, amt=0.16, tint=(70, 70, 76)); d = ImageDraw.Draw(q)
+    q = glass(c, pw, ph, ph / 2, W / 2, py, amt=0.16, tint=(70, 70, 76))
+    q = Image.alpha_composite(q, rrect(pw, ph, ph / 2, (16, 16, 18, 165))); d = ImageDraw.Draw(q)  # a dark backing so the pill reads on a white tee from the first frame
     pill_text(d, pre, hi, f1, f2, (pw - tw) / 2, ph / 2, white + (255,), (255, 176, 146, 255))
-    show(shadowed(q, 14, 6, 70), W / 2, py, 7, front=True)
+    place(c, shadowed(q, 14, 6, 70), W / 2, py + bob(7), 1.0, 0, al * clamp(c.lt / 0.066), guard=True)
 
 
 @effect('glass-widgets', 'frosted glass phone widgets and mini artifacts float around your head, with an Edited by Claude pill')
@@ -1732,7 +1749,7 @@ def fx_match_cut(c, e):
 
 @effect('apple-toggles', 'an iPhone settings card under your chin flips its switches on, one line at a time')
 def fx_apple_toggles(c, e):
-    rows = e.o.get('text', 'كليب واحد|اكتب /effects|من غير apps مونتاج').split('|')
+    rows = e.o.get('text', 'كليب واحد|اكتب /effects|من غير apps للمونتاج').split('|')
     if e.o.get('pos', 'above') != 'below': face_cam(c, 1 + (float(e.o.get('zoom', 1.12)) - 1) * ease_out(c.lt / 0.5), 0.56)
     W = c.W; cw = int(W * 0.72); rh = int(W * 0.125); ch = rh * len(rows); r = int(W * 0.055)
     rtl = any(is_ar(s) for s in rows)
