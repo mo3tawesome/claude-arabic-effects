@@ -311,6 +311,9 @@ def fx_lineup(c, e):
     tiles = cached(e, 'tiles', lambda: [tile(i, n) for i, n in enumerate(names)])
     n = len(tiles); outer = math.ceil(n / 2 + 0.5); inner = n - outer
     cx, cy = c.W / 2 * 0.6 + c.fx * 0.4, c.fy + c.fw * 0.3
+    # a big, low face would hide the arc's top behind the head: lift it so the inner apex clears the hair
+    th_ = tiles[0].height if tiles else tw * 1.25
+    cy = max(min(cy, c.fy - c.fw * 0.95 - th_ * 0.6 + c.W * 0.33 * 1.05), c.W * 0.47 * 1.05 + th_ * 0.6)
     slots = []
     for row, cnt, R in ((0, outer, c.W * 0.47), (1, inner, c.W * 0.33)):
         for k in range(cnt):
@@ -336,7 +339,8 @@ def fx_locked_on(c, e):
     place(c, shadowed(im, 6, 2, 120), c.fx, c.fy, alpha=al)
     tag = text_img(e.o.get('text', 'متثبت عليك').upper(), c.W * 0.022, 'mono', INK)
     pill = rrect(tag.width + 10, tag.height, tag.height / 2, (255, 255, 255, 235)); pill.alpha_composite(tag, (5, 0))
-    place(c, pill, c.fx, c.fy + s * 1.25 + pill.height, alpha=clamp((c.lt - 0.15) / 0.15) * al, guard=True)
+    # the tag sits under the bracket box (already below the chin); the face guard would hide it on the shirt of a big face
+    place(c, pill, c.fx, min(c.fy + s * 1.25 + pill.height, c.H - pill.height * 2), alpha=clamp((c.lt - 0.15) / 0.15) * al)
 
 
 @effect('orbit', 'your reels circle your head: in front at the bottom, behind you at the top')
@@ -346,6 +350,7 @@ def fx_orbit(c, e):
     intro, out = ease_out(c.lt / 0.4), clamp((e.d - c.lt) / 0.25)
     rx, ry = c.W * 0.38 * intro, max(c.fw * 1.5, c.H * 0.1)
     oy = c.fy + c.fw * 0.9
+    ry = max(c.H * 0.05, min(ry, c.H - cards[0].height * 0.55 - oy))  # keep the front cards inside the frame
     items = []
     for i in range(K):
         th = i * 2 * math.pi / K + c.lt * float(e.o.get('speed', 1.9))
@@ -499,17 +504,20 @@ def heart(size, color=(255, 48, 64)):
 def comment_bar(c, e):
     word = e.o.get('text', 'EFFECTS')
     bw, bh = int(c.W * 0.9), int(c.W * 0.11)
-    slide = ease_out(c.lt / 0.3); y = c.H * 0.8 + (1 - slide) * c.H * 0.25
+    y0_ = min(max(c.H * 0.8, c.fy + c.fw * 1.75), c.H - bh * 0.8)  # below a low, large face so the guard does not eat the bar
+    slide = ease_out(c.lt / 0.3); y = y0_ + (1 - slide) * c.H * 0.25
     type_t, post_t = 0.35, 0.35 + 0.08 * len(word) + 0.25
     typed = word[:int(clamp((c.lt - type_t) / (0.08 * len(word))) * len(word) + 0.001)] if c.lt < post_t else ''
     im = rrect(bw, bh, bh / 2, (255, 255, 255, 245)); d = ImageDraw.Draw(im)
     r = bh * 0.32; d.ellipse([bh * 0.2, bh / 2 - r, bh * 0.2 + 2 * r, bh / 2 + r], fill=(214, 41, 118, 255))
     f = font('ui', bh * 0.3)
     if typed: d.text((bh * 0.95, bh / 2), typed + ('|' if int(c.lt * 4) % 2 else ''), font=f, fill=INK + (255,), anchor='lm')
-    elif c.lt < post_t: d.text((bh * 0.95, bh / 2), 'اكتب تعليق...', font=f, fill=(150, 150, 150, 255), anchor='lm')
+    else: d.text((bh * 0.95, bh / 2), 'اكتب تعليق...', font=f, fill=(150, 150, 150, 255), anchor='lm')
     d.text((bw - bh * 0.4, bh / 2), 'نشر', font=f, fill=((0, 149, 246, 255) if typed else (180, 210, 240, 255)), anchor='rm')
     al = clamp((e.d - c.lt) / 0.2)
+    fw0 = c.fw; c.fw = fw0 * 0.7  # tighter face guard so a big, low face does not punch holes in the bar
     place(c, shadowed(im, 14, 6, 100), c.W / 2, y, alpha=al, guard=True)
+    c.fw = fw0
     if c.lt >= post_t:
         k = ease_back((c.lt - post_t) / 0.3)
         b = rrect(int(c.W * 0.52), int(bh * 0.85), bh * 0.3, (255, 255, 255, 240)); bd = ImageDraw.Draw(b)
@@ -568,7 +576,7 @@ def fx_pause_point(c, e):
     lay = Image.new('RGBA', (c.W, c.H), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
     d.rounded_rectangle([c.W * 0.05, c.H * 0.06, c.W * 0.05 + c.W * 0.1, c.H * 0.06 + c.W * 0.1], 16, fill=(0, 0, 0, 150))
     for bx in (0.075, 0.11): d.rectangle([c.W * bx, c.H * 0.06 + c.W * 0.025, c.W * (bx + 0.017), c.H * 0.06 + c.W * 0.075], fill=(255, 255, 255, 230))
-    tx, ty = c.W * float(e.o.get('label_x', 0.72)), c.fy - c.fw * 2.2
+    tx, ty = c.W * float(e.o.get('label_x', 0.72)), max(c.H * 0.13, c.fy - c.fw * 2.2)
     pts = arrow_pts(tx - c.W * 0.05, ty + c.W * 0.06, c.fx + c.fw * 0.75, c.fy - c.fw * 0.35, 0.3)
     k = ease_out((c.lt - 0.15) / 0.4)
     hand_path(d, pts, col, max(6, c.W // 140), k)
@@ -593,10 +601,12 @@ def fx_uninstall(c, e):
         c.img = cv2.resize(small, (c.W, c.H), interpolation=cv2.INTER_NEAREST) * (1 - 0.6 * q)
     bw, bh = int(c.W * 0.7), int(c.W * 0.2)
     im = rrect(bw, bh, 22, (245, 245, 247, 240)); d = ImageDraw.Draw(im)
-    d.text((bw * 0.06, bh * 0.28), e.o.get('text', 'بيتمسح...'), font=font('ui', bh * 0.18), fill=INK + (255,), anchor='lm')
+    ut = e.o.get('text', 'بيتمسح...'); rtl = is_ar(ut); pf = bw * 0.88 * max(0.03, ease_inout(p))  # Arabic: mirrored bar
+    d.text((bw * (0.94 if rtl else 0.06), bh * 0.28), ut, font=font('ui', bh * 0.18), fill=INK + (255,), anchor='rm' if rtl else 'lm')
     d.rounded_rectangle([bw * 0.06, bh * 0.56, bw * 0.94, bh * 0.7], 8, fill=(215, 215, 220, 255))
-    d.rounded_rectangle([bw * 0.06, bh * 0.56, bw * 0.06 + bw * 0.88 * max(0.03, ease_inout(p)), bh * 0.7], 8, fill=(0, 122, 255, 255))
-    d.text((bw * 0.94, bh * 0.85), f'{int(ease_inout(p) * 100)}%', font=font('ui', bh * 0.13), fill=(110, 110, 110, 255), anchor='rm')
+    bx0 = bw * 0.94 - pf if rtl else bw * 0.06
+    d.rounded_rectangle([bx0, bh * 0.56, bx0 + pf, bh * 0.7], 8, fill=(0, 122, 255, 255))
+    d.text((bw * (0.06 if rtl else 0.94), bh * 0.85), f'{int(ease_inout(p) * 100)}%', font=font('ui', bh * 0.13), fill=(110, 110, 110, 255), anchor='lm' if rtl else 'rm')
     place(c, shadowed(im, 16, 8, 120), c.W / 2, c.H * 0.16, 0.8 + 0.2 * ease_back(c.lt / 0.3), 0, clamp(c.lt / 0.1))
 
 
@@ -668,7 +678,8 @@ def fx_reject_stamp(c, e):
         M = np.float32([[1, 0, rnd.uniform(-a, a)], [0, 1, rnd.uniform(-a, a)]])
         c.img = cv2.warpAffine(c.img, M, (c.W, c.H), borderMode=cv2.BORDER_REFLECT)
     y = clamp(float(e.o['y']) * c.H if 'y' in e.o else c.fy + c.fw * 2.7, 0, c.H * 0.85)
-    place(c, st, c.W / 2, y, sc, float(e.o.get('angle', 12)), k * clamp((e.d - c.lt) / 0.2), guard=True)
+    fw0 = c.fw; c.fw = fw0 * 0.7  # tighter face guard: with a big, low face the default one ate the stamp's middle letters on the chest
+    place(c, st, c.W / 2, y, sc, float(e.o.get('angle', 12)), k * clamp((e.d - c.lt) / 0.2), guard=True); c.fw = fw0
 
 
 @effect('countdown-flip', 'a 3, 2, 1 flip clock above your head')
@@ -764,7 +775,8 @@ def fx_scribble(c, e):
     if k2 > 0: hand_path(d, pts, col, wd, k2)
     if k2 >= 0.99: arrow_head(d, pts, col, wd, c.W * 0.035)
     for j, (sx, sy) in enumerate(((c.fx - c.fw * 1.9, c.fy - c.fw * 1.2), (c.fx - c.fw * 1.5, c.fy + c.fw * 0.6), (c.fx + c.fw * 1.6, c.fy + c.fw * 0.3))):
-        ks = ease_back((c.lt - 0.8 - 0.1 * j) / 0.25) * c.fw * 0.28
+        ks = ease_back((c.lt - 0.8 - 0.1 * j) / 0.25) * min(c.fw * 0.28, c.W * 0.045)
+        sx = clamp(sx, ks + c.W * 0.03, c.W - ks - c.W * 0.03)  # big face: keep the sparkles on screen
         if ks > 0:
             d.line([(sx - ks, sy), (sx + ks, sy)], fill=col, width=wd); d.line([(sx, sy - ks), (sx, sy + ks)], fill=col, width=wd)
     al = clamp((e.d - c.lt) / 0.2)
@@ -891,6 +903,8 @@ def fx_red_collage(c, e):
     lines = e.o.get('lines', 'كليب واحد.|42 effect.|من غير apps.').split('|')
     size = cached(e, 'sz', lambda: lines_fit(lines, c.W * 0.8, 'uib', int(c.W * 0.14)))
     y = min(max(c.H * 0.5, c.fy + c.fw * 1.55), c.H * 0.9 - size * 1.15 * len(lines))  # keep every line on screen
+    if y < c.fy + c.fw * 0.9:  # face sits too low for the stack under the chin: put it above the red word instead
+        y = max(c.H * 0.04, max(w.height * 0.42, c.fy - c.fw * 1.05) - w.height * 0.42 - size * 1.05 * len(lines))
     for j, ln in enumerate(lines):
         im = cached(e, ('l', j), lambda: text_img(ln, size, 'uib', red if j == 1 else (255, 255, 255), shadow=8))
         kk = clamp((c.lt - 0.18 - 0.13 * j) / 0.16)
@@ -917,8 +931,8 @@ def fx_split_headline(c, e):
     for j, ln in enumerate(lines):
         kj = clamp((c.lt - 0.12 - 0.08 * j) / 0.18)
         if kj <= 0: continue
-        y = y0 + j * S * 1.04 + (1 - ease_out(kj)) * S * 0.35; a = int(255 * kj)
         rtl = any(is_ar(l) for l in lines); x = W - x0 if rtl else x0  # Arabic headlines start at the right edge and run leftwards
+        y = y0 + j * S * (1.12 if rtl else 1.04) + (1 - ease_out(kj)) * S * 0.35; a = int(255 * kj)
         ty = y
         for wi, word in enumerate(ln.split(' ')):
             tail = '.' if word.endswith('.') else ''; core = word[:-1] if tail else word
@@ -934,7 +948,7 @@ def fx_split_headline(c, e):
                 d.text((x, ty), core, font=f, fill=((255, 255, 255, a) if hk > 0.55 else (20, 20, 22, a)))
             else: d.text((x, ty), core, font=f, fill=(20, 20, 22, a))
             if rtl:
-                if tail: x -= tl; d.text((x, ty), tail, font=f, fill=col + (a,))
+                if tail: x -= tl; d.text((x, ty + f.getbbox(core)[3] - f.getbbox(core, anchor='ls')[3]), tail, font=f, fill=col + (a,), anchor='ls')  # sit the Latin dot on the Arabic baseline
                 x -= f.getlength(' ') + (S * 0.12 if core == hl else 0)
             else:
                 x += wl
@@ -968,7 +982,7 @@ def fx_pastel_word(c, e):
     d.text((chh * 0.98, chh * 0.38), e.o.get('name', 'Moatassem'), font=font('uib', chh * 0.22), fill=(20, 20, 22, 255), anchor='lm')
     h1 = e.o.get('handle', '@moatassem.ai  ·  '); f = font('uim', chh * 0.15)
     d.text((chh * 0.98, chh * 0.66), h1, font=f, fill=(140, 140, 150, 255), anchor='lm')
-    d.text((chh * 0.98 + f.getlength(h1), chh * 0.66), e.o.get('role', 'creator'), font=f, fill=PURPLE + (255,), anchor='lm')
+    d.text((chh * 0.98 + f.getlength(h1), chh * 0.66), e.o.get('role', 'صانع محتوى'), font=f, fill=PURPLE + (255,), anchor='lm')
     at = e.d * 0.6; on = c.lt >= at
     bx = cw - chh * 0.22
     d.text((bx, chh / 2), 'بتتابعه' if on else 'تابع', font=font('uib', chh * 0.2), fill=((140, 140, 150, 255) if on else PURPLE + (255,)), anchor='rm')
@@ -1009,6 +1023,8 @@ def fx_check_pills(c, e):
     for i, n in enumerate(names):
         sx, sy = spots[i % len(spots)]
         x = clamp(c.fx + sx * c.fw * 1.6, W * 0.16, W * 0.84); y = clamp(c.fy + sy * c.fw, H * 0.3, H * 0.9)
+        if c.fy + 3.0 * c.fw > H * 0.9:  # face sits low: pills would pile up at the bottom, so use two tidy columns under the chin
+            x = W * (0.27 if i % 2 == 0 else 0.73); y = H * 0.9 - (len(names) - 1) // 2 * ph * 1.35 + (i // 2) * ph * 1.35
         t0 = 0.22 + 0.2 * i; pos.append((x, y, t0))
         if c.lt < t0: continue
         clicked = c.lt >= t0 + 0.12
@@ -1016,7 +1032,7 @@ def fx_check_pills(c, e):
         pill = rrect(pw, ph, ph / 2, BLUE + (255,)); pill.alpha_composite(t, (int(ph * 0.18), int((ph - t.height) / 2)))
         if clicked: tick(ImageDraw.Draw(pill), pw - ph * 0.55, ph * 0.33, ph * 0.33)
         sq = 1 - 0.1 * math.sin(math.pi * clamp((c.lt - t0 - 0.12) / 0.2))
-        place(c, shadowed(pill, 10, 5, 90), x, y, (0.5 + 0.5 * pop(c, t0, 0.25)) * sq, 0, al, guard=True)
+        place(c, shadowed(pill, 10, 5, 90), x, y, (0.5 + 0.5 * pop(c, t0, 0.25)) * sq, 0, al, guard=y - ph < c.fy + c.fw * 0.9)
     if pos and c.lt > pos[0][2] - 0.1:
         seg = [p for p in pos if p[2] <= c.lt + 0.1]; tx, ty, t0 = seg[-1]
         px, py = (pos[len(seg) - 2][0], pos[len(seg) - 2][1]) if len(seg) > 1 else (W * 0.9, H * 0.95)
@@ -1044,7 +1060,7 @@ def red_timeline(c, e):
     comp(c, su, rx(su, W * 0.065), H * 0.075 + rec.height * 0.85 + ti.height * 0.88, tb, guard=True)
     pw, phh = int(W * 0.9), int(H * 0.19); py = H * 0.755 + (1 - ease_out((c.lt - 0.1) / 0.35)) * H * 0.3
     lay = rrect(pw, phh, W * 0.03, (14, 10, 10, 215), (255, 70, 60, 90), 2); d = ImageDraw.Draw(lay)
-    for j in range(4): d.text((pw * (0.05 + 0.3 * j), phh * 0.12), f'00:0{j}', font=font('mono', W * 0.022), fill=(170, 170, 175, 255), anchor='lm')
+    for j in range(4): d.text((pw * (0.05 + 0.27 * j), phh * 0.12), f'00:0{j}', font=font('mono', W * 0.022), fill=(170, 170, 175, 255), anchor='lm')
     clips = cached(e, 'cl', lambda: [(r, a, b) for r, segs in enumerate([[(0.04, 0.24), (0.26, 0.5), (0.53, 0.76), (0.79, 0.96)],
                                                                             [(0.04, 0.3), (0.33, 0.45), (0.48, 0.7)], [(0.04, 0.55), (0.6, 0.96)]]) for a, b in segs])
     p = 0.04 + 0.92 * clamp(c.lt / (e.d * 0.95)); ph_x = pw * p
@@ -1057,7 +1073,7 @@ def red_timeline(c, e):
     d.line([(ph_x, phh * 0.2), (ph_x, phh * 0.97)], fill=(255, 255, 255, 255), width=max(3, W // 300))
     gd.line([(ph_x, phh * 0.2), (ph_x, phh * 0.97)], fill=(255, 255, 255, 255), width=max(8, W // 100))
     lay = Image.alpha_composite(glow.filter(ImageFilter.GaussianBlur(W // 90)), lay)
-    comp(c, lay, (W - pw) / 2, py, al, guard=True)
+    comp(c, lay, (W - pw) / 2, py, al, guard=py < c.fy + c.fw * 0.9)  # below the chin the panel can sit over your chest
 
 
 @effect('headline-box', 'a punch-in with a clean two-line headline, the second line in a white box')
@@ -1074,8 +1090,10 @@ def fx_headline_box(c, e):
         if boxed:
             bx = rrect(t.width - S * 0.15, S * 1.22, S * 0.08, (255, 255, 255, 255))
             wk = ease_out(kj); bx = bx.crop((0, 0, max(1, int(bx.width * wk)), bx.height))
-            comp(c, bx, W / 2 - (t.width - S * 0.15) / 2, y, al, guard=True)
-        place(c, t, W / 2, y + S * 0.6, 0.92 + 0.08 * ease_out(kj), 0, al * kj, guard=True)
+        gd = y + S * 1.3 > c.fy - c.fw * 0.55  # above the brows the headline may sit over your hair
+        if boxed:
+            comp(c, bx, W / 2 - (t.width - S * 0.15) / 2, y, al, guard=gd)
+        place(c, t, W / 2, y + S * 0.6, 0.92 + 0.08 * ease_out(kj), 0, al * kj, guard=gd)
         y += S * 1.3
 
 
@@ -1086,7 +1104,7 @@ def fx_profile_wall(c, e):
         pw = int(W * 0.92); ph = int(H * 0.36); im = rrect(pw, ph, W * 0.035, (16, 16, 18, 240)); d = ImageDraw.Draw(im)
         tabs = ('البوستات', 'الريلز', 'التاجات'); f = font('uim', W * 0.032)
         for j, tb in enumerate(tabs):
-            x = pw * (0.2 + 0.3 * j); d.text((x, ph * 0.06), tb, font=f, fill=((255, 255, 255, 255) if j == 1 else (130, 130, 136, 255)), anchor='mm')
+            x = pw * ((0.8 - 0.3 * j) if is_ar(tb) else (0.2 + 0.3 * j)); d.text((x, ph * 0.06), tb, font=f, fill=((255, 255, 255, 255) if j == 1 else (130, 130, 136, 255)), anchor='mm')
             if j == 1: d.rectangle([x - pw * 0.08, ph * 0.1, x + pw * 0.08, ph * 0.1 + 4], fill=(255, 255, 255, 255))
         gr = thumb_grid(e.cards, 4, 2, int(pw * 0.225), int(pw * 0.012), look=False)
         im.alpha_composite(gr, ((pw - gr.width) // 2, int(ph * 0.14))); return shadowed(im, 20, 10, 110)
@@ -1104,12 +1122,16 @@ def fx_profile_wall(c, e):
     on = c.lt >= e.d * 0.7
     d.rounded_rectangle([cw - chh * 0.95, chh * 0.62, cw - chh * 0.14, chh * 0.86], chh * 0.12, fill=((60, 60, 66, 255) if on else (255, 255, 255, 255)))
     d.text((cw - chh * 0.545, chh * 0.74), 'بتتابعه' if on else 'تابع', font=font('uib', chh * 0.08), fill=((255, 255, 255, 255) if on else (16, 16, 18, 255)), anchor='mm')
-    place(c, g, W / 2, cy + (1 - ease_out((c.lt - 0.05) / 0.3)) * H * 0.1, 1, 0, al * clamp((c.lt - 0.05) / 0.12), guard=True)
+    place(c, g, W / 2, cy + (1 - ease_out((c.lt - 0.05) / 0.3)) * H * 0.1, 1, 0, al * clamp((c.lt - 0.05) / 0.12), guard=cy - chh / 2 < c.fy + c.fw * 0.9)
 
 
 @effect('tier-list', 'a tier list drops in front of you and Claude flies into S tier')
 def fx_tier_list(c, e):
     W, H = c.W, c.H; al = fade(c, e)
+    need = c.fy + c.fw * 0.85 - (H * 0.95 - (W * 0.093 + W * 0.082 * 6 + 92))  # board height, see chh below
+    if need > 0:  # face sits low: lift you so the board stays under your chin, and fade the stretched strip at the bottom
+        lift = min(need, H * 0.3) * ease_out(c.lt / 0.35) * clamp((e.d - c.lt) / 0.25); shift(c, -lift)
+        if lift > 1: y0 = int(H - lift * 1.6); c.img[y0:] *= np.linspace(1, 0.3, H - y0, dtype=np.float32)[:, None, None]
     ttl = cached(e, 'ttl', lambda: fit_text(e.o.get('title', 'أحسن طريقة تعدّل بيها ريل؟'), W * 0.88, 'serif', int(W * 0.11), fill=YELLOW, shadow=8))
     place(c, ttl, W / 2, max(ttl.height * 0.6, c.fy - c.fw * 1.65), 0.9 + 0.1 * ease_out(c.lt / 0.3), 0, al * clamp(c.lt / 0.15), behind=True)
     tiers = [('S', (255, 127, 127)), ('A', (255, 191, 127)), ('B', (255, 223, 127)), ('C', (191, 255, 127)), ('D', (127, 191, 255)), ('F', (191, 127, 255))]
@@ -1130,14 +1152,14 @@ def fx_tier_list(c, e):
     bd = cached(e, 'bd', board)
     top = min(H * 0.95 - bd.height, max(c.fy + c.fw * 1.4, H * 0.45))
     k = ease_back(c.lt / 0.35); bx, by = W / 2, top + bd.height / 2 + (1 - k) * H * 0.15
-    place(c, bd, bx, by, 1, 0, al * clamp(c.lt / 0.12), guard=True)
+    place(c, bd, bx, by, 1, 0, al * clamp(c.lt / 0.12), guard=top < c.fy + c.fw * 0.8)
     tile = cached(e, 'tile', lambda: shadowed(rrect(int(rh * 2.6), int(rh * 0.8), rh * 0.16, ORANGE + (255,)), 8, 4, 100))
     tx = cached(e, 'tx', lambda: text_img(e.o.get('item', 'Claude'), rh * 0.36, 'uib', (255, 255, 255)))
     tl = tile.copy(); tl.alpha_composite(tx, ((tl.width - tx.width) // 2, (tl.height - tx.height) // 2 - 3))
     sx, sy = W * 0.86, c.fy + c.fw * 0.4
-    ex = bx - bd.width / 2 + 18 + pad * 3 + rh + tile.width / 2 - 10; ey = by - bd.height / 2 + 18 + pad + rh / 2
+    ex = bx - bd.width / 2 + 18 + pad * 3 + rh + tile.width / 2 - 10; ey = by - bd.height / 2 + 44 + pad + rh / 2  # 46 = the board's shadow margin, less half the tile's shadow drop
     q = ease_back((c.lt - 0.45) / 0.4)
-    if c.lt > 0.4: place(c, tl, sx + (ex - sx) * q, sy + (ey - sy) * q, 1.25 - 0.25 * clamp(q), 18 * (1 - clamp(q)), al, guard=True)
+    if c.lt > 0.4: place(c, tl, sx + (ex - sx) * q, sy + (ey - sy) * q, 1.25 - 0.25 * clamp(q), 18 * (1 - clamp(q)), al, guard=q < 0.9)  # once it lands in S tier it sits under your chin
 
 
 @effect('broll-split', 'split screen: b-roll on top with a price-tag sticker, you on the bottom')
@@ -1159,7 +1181,7 @@ def fx_broll_split(c, e):
     d.polygon([(0, th / 2), (n, 0), (tw, 0), (tw, th), (n, th)], fill=(255, 255, 255, 255))
     d.ellipse([n * 0.55, th / 2 - n * 0.16, n * 0.87, th / 2 + n * 0.16], fill=(200, 200, 205, 255))
     st.alpha_composite(tag, (int(n * 1.05), (th - tag.height) // 2))
-    place(c, shadowed(st, 12, 6, 110), W * 0.66, H * 0.39 * k + H * 0.0, 0.5 + 0.5 * pop(c, 0.3), 8, al * clamp((c.lt - 0.3) / 0.08))
+    place(c, shadowed(st, 12, 6, 110), W * 0.66, H * 0.085 * k, 0.5 + 0.5 * pop(c, 0.3), 8, al * clamp((c.lt - 0.3) / 0.08))
 
 
 @effect('phone-fan', 'your reels fan out like a hand of phones in front of you, under a two-line headline')
@@ -1249,6 +1271,11 @@ def fx_headline_wall(c, e):
     def hcard(i):
         title, meta = (items[i % len(items)] + [''])[:2]; bg, fg = looks[i % len(looks)]
         cw = int(W * 0.5); f = font('uib', cw * 0.085); words = title.split(' '); lines, cur = [], ''
+        rtl = is_ar(title); ws = []
+        for w_ in words:  # keep a "بـ " / "الـ " prefix on the same line as the word after it
+            if ws and ws[-1].endswith('ـ'): ws[-1] += ' ' + w_
+            else: ws.append(w_)
+        words = ws
         for w_ in words:
             tst = (cur + ' ' + w_).strip()
             if f.getlength(tst) > cw * 0.84 and cur: lines.append(cur); cur = w_
@@ -1257,7 +1284,7 @@ def fx_headline_wall(c, e):
         chh = int(cw * 0.1 + lh * len(lines) + cw * 0.16)
         im = rrect(cw, chh, cw * 0.04, bg + (255,)); d = ImageDraw.Draw(im)
         for j, ln in enumerate(lines):
-            if is_ar(ln): d.text((cw * 0.92, cw * 0.07 + j * lh), ln, font=f, fill=fg + (255,), anchor='ra')
+            if rtl: d.text((cw * 0.92, cw * 0.07 + j * lh), ln, font=f, fill=fg + (255,), anchor='ra')
             else: d.text((cw * 0.08, cw * 0.07 + j * lh), ln, font=f, fill=fg + (255,))
         my = chh - cw * 0.085; s = cw * 0.04
         d.polygon([(cw * 0.08, my - s / 2), (cw * 0.08, my + s / 2), (cw * 0.08 + s * 0.9, my)], fill=(255, 48, 64, 255))
@@ -1277,8 +1304,10 @@ def fx_headline_wall(c, e):
         tot = e.o.get('total', '672K'); lab = e.o.get('label', 'مشاهدة من 7 ريلز')
         a = text_img(tot, 96 * u, 'anton', (255, 255, 255)); b = text_img(lab, 34 * u, 'uib', (255, 255, 255))
         pw = int(a.width + b.width + 30 * u); ph = int(max(a.height, b.height) + 10 * u)
-        pill = rrect(pw, ph, ph * 0.28, (217, 119, 87, 245)); pill.alpha_composite(a, (int(8 * u), (ph - a.height) // 2)); pill.alpha_composite(b, (int(a.width + 8 * u), (ph - b.height) // 2))
-        place(c, shadowed(pill, 18, 8, 110), W / 2, max(c.fy + c.fw * 1.8, H * 0.6), 0.6 + 0.4 * pop(c, t1, 0.3), -3, al * clamp((c.lt - t1) / 0.08), guard=True)
+        pill = rrect(pw, ph, ph * 0.28, (217, 119, 87, 245))
+        if is_ar(lab): pill.alpha_composite(b, (int(14 * u), (ph - b.height) // 2)); pill.alpha_composite(a, (int(b.width + 14 * u), (ph - a.height) // 2))  # Arabic: number on the right
+        else: pill.alpha_composite(a, (int(8 * u), (ph - a.height) // 2)); pill.alpha_composite(b, (int(a.width + 8 * u), (ph - b.height) // 2))
+        place(c, shadowed(pill, 18, 8, 110), W / 2, min(max(c.fy + c.fw * 1.8, H * 0.6), H - ph * 0.9), 0.6 + 0.4 * pop(c, t1, 0.3), -3, al * clamp((c.lt - t1) / 0.08), guard=True)
 
 
 @effect('checklist', 'a Claude task list builds under your chin: each step spins, then ticks green')
@@ -1287,7 +1316,15 @@ def fx_checklist(c, e):
     rows = [x.split('::') for x in e.o.get('text', 'لقيت وشك::كل frame|فصلتك عن الأوضة::AI mask|حطيت الكلام وراك::depth|'
                                         'ظبطت الألوان::warm|عملت render بـ 4K::2160p').split('|')]
     n = len(rows); cw = W * 0.9; rh = 104 * u; hh = 120 * u; chh = hh + rh * n + 26 * u
-    y0 = min(max(c.fy + c.fw * 1.35, H * 0.42), H * 0.93 - chh); cy = y0 + chh / 2 + (1 - ease_out(c.lt / 0.35)) * H * 0.12
+    def _hair():  # how far the top of your hair sits above the face centre (from the person mask, measured once)
+        xa, xb = int(max(0, c.fx - c.fw * 0.6)), int(min(W, c.fx + c.fw * 0.6)); r_ = np.where(c.m[:, xa:xb].max(1) > 0.5)[0]
+        return (c.fy - r_[0]) if len(r_) else c.fw * 1.1
+    if max(c.fy + c.fw * 1.35, H * 0.42) + chh > H * 0.93 + 2:  # no room under your chin: the card goes above your head, smaller
+        top = c.fy - cached(e, 'hair', _hair) - H * 0.015; s_ = clamp((top - H * 0.03) / chh, 0.6, 1.0)
+        u *= s_; rh *= s_; hh *= s_; chh *= s_
+        y0 = max(H * 0.03, top - chh); cy = y0 + chh / 2 - (1 - ease_out(c.lt / 0.35)) * H * 0.06
+    else:
+        y0 = min(max(c.fy + c.fw * 1.35, H * 0.42), H * 0.93 - chh); cy = y0 + chh / 2 + (1 - ease_out(c.lt / 0.35)) * H * 0.12
     span = max(0.4, e.d - 0.55); done_at = [0.3 + span * (i + 1) / n for i in range(n)]
     g = glass(c, cw, chh, 40 * u, W / 2, cy, amt=0.78, tint=(14, 13, 16), blur=int(30 * u)); d = ImageDraw.Draw(g)
     title = e.o.get('title', 'Claude بيعدّل الكليب بتاعك'); rtl = is_ar(title) or any(is_ar(r[0]) for r in rows)
@@ -1486,15 +1523,16 @@ def comment_sheet(c, e):
     d.line([(0, 80 * u), (sw, 80 * u)], fill=(60, 60, 64, 255), width=max(1, int(2 * u)))
     def avatar(sz):
         a = Image.new('RGBA', (int(sz), int(sz)), (0, 0, 0, 0)); ad = ImageDraw.Draw(a)
-        ad.ellipse([0, 0, sz - 1, sz - 1], fill=(233, 90, 140, 255)); ad.text((sz / 2, sz / 2), 'V', font=font('uib', sz * 0.5), fill=(255, 255, 255, 255), anchor='mm')
+        ad.ellipse([0, 0, sz - 1, sz - 1], fill=(233, 90, 140, 255))  # viewer avatar: plain head + shoulders, no initial
+        ad.ellipse([sz * 0.35, sz * 0.2, sz * 0.65, sz * 0.5], fill=(255, 255, 255, 230)); ad.chord([sz * 0.2, sz * 0.56, sz * 0.8, sz * 1.1], 180, 360, fill=(255, 255, 255, 230))
         return a
     if c.lt < t_post:
         d.text((sw / 2, 190 * u), 'ابدأ إنت الكلام.', font=font('uim', 21 * u), fill=grey, anchor='mm')
     else:
         q = ease_out((c.lt - t_post) / 0.25); oy = (1 - q) * -20 * u; a8 = int(255 * clamp(q * 1.5))
         av = avatar(46 * u); av.putalpha(av.split()[3].point(lambda v: v * a8 // 255)); sheet.alpha_composite(av, (int(26 * u), int(100 * u + oy)))
-        d.text((88 * u, 108 * u + oy), 'إنت', font=font('uib', 19 * u), fill=white[:3] + (a8,), anchor='lm')
-        d.text((88 * u + font('uib', 19 * u).getlength('إنت ') + 4 * u, 108 * u + oy), 'دلوقتي', font=font('uim', 18 * u), fill=grey[:3] + (a8,), anchor='lm')
+        d.text((88 * u, 108 * u + oy), 'دلوقتي', font=font('uim', 18 * u), fill=grey[:3] + (a8,), anchor='lm')  # left of 'إنت' so it reads RTL
+        d.text((88 * u + font('uim', 18 * u).getlength('دلوقتي ') + 4 * u, 108 * u + oy), 'إنت', font=font('uib', 19 * u), fill=white[:3] + (a8,), anchor='lm')
         d.text((86 * u, 128 * u + oy), word, font=font('uib', 50 * u), fill=white[:3] + (a8,))
         d.text((88 * u, 196 * u + oy), 'رد', font=font('uim', 17 * u), fill=grey[:3] + (a8,), anchor='lm')
         hk = ease_back((c.lt - t_heart) / 0.3)
@@ -1538,7 +1576,7 @@ def comment_sheet(c, e):
     pressed = t_post - 0.08 <= c.lt < t_post
     d.text((sw - 44 * u, iy + 24 * u), 'نشر', font=font('uib', 23 * u), fill=(blue if typed else (70, 110, 160, 255)) if not pressed else (140, 200, 255, 255), anchor='rm')
     sheet = shadowed(sheet, 22, 10, 120)
-    bottom = c.fy - c.fw * 0.5; top = bottom - sheet.height
+    bottom = max(H * 0.25, c.fy - c.fw * 1.1); top = bottom - sheet.height  # higher, so big curly hair does not hide the reply
     s = 1.0
     if top < H * 0.02: s = max(0.6, (bottom - H * 0.02) / sheet.height)
     cy = bottom - sheet.height * s / 2 + 3 * u * math.sin(c.lt * 3.2)
@@ -1567,7 +1605,10 @@ def fx_liquid_glass_graph(c, e):
     W = c.W; cw, ch = int(W * 0.74), int(W * 0.46); sc = 0.88 + 0.12 * q
     cx = W / 2; cy = min(c.H - ch * 0.62, c.fy + c.fw * 2.7) + (1 - q) * W * 0.08
     gw, gh = int(cw * sc), int(ch * sc)
-    im = glass(c, gw, gh, gh * 0.12, cx, cy, amt=0.16, blur=max(10, W // 30), dark=0.12)
+    def _dk():  # a bright background (a white tee) would swallow the white text: smoke the glass more
+        ya, yb = int(clamp(cy - gh / 2, 0, c.H - 1)), int(clamp(cy + gh / 2, 1, c.H)); xa, xb = int(cx - gw / 2), int(cx + gw / 2)
+        return 0.12 + 0.5 * clamp((float(c.img[ya:yb, max(0, xa):xb].mean()) - 0.4) / 0.3)
+    im = glass(c, gw, gh, gh * 0.12, cx, cy, amt=0.16, blur=max(10, W // 30), dark=cached(e, 'dark', _dk))
     hi = cached(e, ('hi', gw, gh), lambda: Image.fromarray(np.dstack([np.full((gh, gw, 3), 255, np.uint8),
         (np.clip(1 - np.linspace(0, 1, gh) * 2.2, 0, 1)[:, None] * np.ones(gw) * 46).astype(np.uint8)]), 'RGBA'))
     hm = Image.new('L', (gw, gh), 0); ImageDraw.Draw(hm).rounded_rectangle([0, 0, gw - 1, gh - 1], int(gh * 0.12), fill=255)
@@ -1596,12 +1637,14 @@ def fx_liquid_glass_graph(c, e):
         yy = y0 - (y0 - y1) * j / 3.4
         d.line([(x0, yy), (x1, yy)], fill=(255, 255, 255, 40), width=max(1, int(gw * 0.002)))
     im.alpha_composite(lay)
-    place(c, shadowed(im, max(10, W // 70), W // 90, 90), cx, cy, alpha=al, guard=True)
+    place(c, shadowed(im, max(10, W // 70), W // 90, 90), cx, cy, alpha=al, guard=cy - gh / 2 < c.fy + c.fw * 0.6)  # below your chin the guard would only punch a hole over your shirt
 
 
 @effect('carousel-spin', 'your reels spin around you in a 3D carousel, then slow to a stop')
 def fx_carousel_spin(c, e):
     K = int(e.o.get('count', max(6, min(12, len(e.cards))))); cw = int(c.W * float(e.o.get('size', 0.3)))
+    room = c.H * 0.92 - (c.fy + c.fw * 0.95)  # a low, large face leaves little room under the chin: shrink the cards to fit there
+    cw = cached(e, 'cw', lambda: int(clamp(room / 1.06 / 1.9, c.W * 0.17, cw)))
     def mk():
         out = []
         for i, im in enumerate(e.cards):
@@ -1616,7 +1659,7 @@ def fx_carousel_spin(c, e):
     p = clamp(c.lt / e.d); spin = float(e.o.get('turns', 1.1)) * 2 * math.pi * (1 - (1 - p) ** 2.4)
     intro, out = ease_out(c.lt / 0.45), fade(c, e, 0.25)
     R, ry = c.W * 0.56 * intro, c.H * 0.07
-    cy = c.fy + c.fw * 1.8
+    cy = min(c.fy + c.fw * 1.8, c.H - ry - cards[0][0].height * 0.56)  # a low face would push the ring off the bottom
     items = sorted((math.cos(i * 2 * math.pi / K + spin), i * 2 * math.pi / K + spin, i) for i in range(K))
     for depth, th, i in items:
         n = len(cards); f, dk = cards[(i * (3 if n % 3 else 2)) % n]; src = f if depth >= 0 else dk  # spread similar covers apart
@@ -1624,12 +1667,15 @@ def fx_carousel_spin(c, e):
         s = (0.72 + 0.34 * (depth + 1) / 2) * (0.5 + 0.5 * intro)
         w2, h2 = max(2, int(src.width * s * sx)), max(2, int(src.height * s))
         place(c, src.resize((w2, h2), Image.BILINEAR), c.fx + R * math.sin(th), cy + ry * depth, 1.0, 0,
-              out * clamp(c.lt / 0.12) * (0.85 + 0.15 * depth), behind=depth < 0, guard=depth >= 0)
+              out * clamp(c.lt / 0.12) * (0.85 + 0.15 * depth), behind=depth < 0, guard=depth >= 0 and cy + ry * depth - h2 / 2 < c.fy + c.fw * 0.9)
 
 
 MATCH_TXT = ('one clip went in and every cut came back before lunch while editors once spent whole weeks rebuilding the same '
              'timeline by hand early users called it unsettling then impossible to ignore the dead air was gone the captions '
              'matched and the colour finally looked like the room it was shot in nobody opened an editing app all week').split()
+MATCH_TXT_AR = ('كليب واحد دخل وكل القطعات رجعت قبل الغدا والمونتير كان بيقعد أسابيع يعيد نفس الشغل بإيده أول ناس جربوه قالوا '
+                'ده مش طبيعي وبعدها محدش قدر يتجاهله السكوت اتشال والكابشن مظبوط والألوان أخيرا شبه الأوضة اللي اتصورت فيها '
+                'ومحدش فتح برنامج مونتاج طول الأسبوع').split()
 
 
 def match_page(c, e, j, wx, wy):
@@ -1644,7 +1690,7 @@ def match_page(c, e, j, wx, wy):
     ww = f.getlength(word); bx0 = wx - ww / 2
     def run(x, y, direction):
         while (x < W + size if direction > 0 else x > -size * 6):
-            w_ = rnd.choice(MATCH_TXT) + ' '
+            w_ = rnd.choice(MATCH_TXT if e.o.get('filler') == 'en' else MATCH_TXT_AR) + ' '
             if direction < 0: x -= f.getlength(w_)
             d.text((x, y), w_, font=f, fill=ink)
             if direction > 0: x += f.getlength(w_)
@@ -1716,7 +1762,10 @@ def fx_apple_toggles(c, e):
     if e.o.get('pos', 'above') == 'below':
         place(c, im, c.W / 2, min(c.H - ch * 0.75, c.fy + c.fw * 2.5), 0.6 + 0.4 * q, 0, al, guard=True); return
     # above you, tucked behind your head: your hair overlaps only the bottom edge
-    cy = max(c.H * 0.08 + ch / 2, c.fy - c.fw * 0.95 + c.fw * float(e.o.get('overlap', 0.08)) - ch / 2)
+    def _hair():  # top of your hair above the face centre, in face widths (from the person mask; tall hair would hide the last row)
+        xa, xb = int(max(0, c.fx - c.fw * 0.6)), int(min(c.W, c.fx + c.fw * 0.6)); r_ = np.where(c.m[:, xa:xb].max(1) > 0.5)[0]
+        return max(0.95, (c.fy - r_[0]) / c.fw) if len(r_) else 0.95
+    cy = max(c.H * 0.04 + ch / 2, c.fy - c.fw * cached(e, 'hair', _hair) + c.fw * float(e.o.get('overlap', 0.08)) - ch / 2)
     place(c, im, c.W / 2, cy + (1 - q) * c.W * 0.04, 0.6 + 0.4 * q, 0, al, behind=True)
 
 
@@ -1753,7 +1802,11 @@ def fx_led_sign(c, e):
     glow = cv2.GaussianBlur(pan, (0, 0), cell * 0.9)
     pan = np.clip(pan + glow * 1.6, 0, 1)
     ph, pw = pan.shape[:2]; x0 = int(c.W / 2 - pw / 2)
-    y0 = int(max(c.H * 0.03, c.fy - c.fw * 0.75 - ph * (1.12 if ar else 1)))  # Arabic descenders: lift a touch more
+    def _hair():  # top of your hair above the face centre, in face widths (tall hair would hide the middle letters)
+        xa, xb = int(max(0, c.fx - c.fw * 0.6)), int(min(c.W, c.fx + c.fw * 0.6)); r_ = np.where(c.m[:, xa:xb].max(1) > 0.5)[0]
+        return (c.fy - r_[0]) / c.fw if len(r_) else 0.95
+    hb = min(c.fy - c.fw * 0.75, c.fy - c.fw * cached(e, 'hair', _hair) + ph * 0.25)  # sign bottom: your hair only nicks its lower edge
+    y0 = int(max(c.H * 0.03, hb - ph * (1.12 if ar else 1)))  # Arabic descenders: lift a touch more
     xx, yy = grid(c)
     d = ((xx - c.fx) / (c.W * 0.6)) ** 2 + ((yy - (c.fy + c.H * 0.25)) / (c.H * 0.55)) ** 2
     bright = 1 - k * (0.84 - 0.3 * np.clip(1 - d, 0, 1))
@@ -1861,14 +1914,15 @@ def cover_editorial(c, e):
     place(c, rule, W / 2, H * 0.087 + m.height, alpha=al * k * 0.8, behind=True)
     lines = e.o.get('lines', 'كليب واحد،|42 لوك.|من غير editor  ·  من غير apps').split('|')
     styles = [('didonei', 0.085, ink), ('didoneb', 0.105, rose), ('ui', 0.03, ink)]
-    y = H * float(e.o.get('lines_y', 0.575))
+    dy = 0 if 'lines_y' in e.o else cached(e, 'dy', lambda: clamp(c.fy + c.fw * 1.3 - H * 0.575, 0, H * 0.12))  # low, large face: drop both stacks below the chin
+    y = H * float(e.o.get('lines_y', 0.575)) + dy
     for j, ln in enumerate(lines):
         kind, sz, col = styles[min(j, 2)]
         im = cached(e, ('l', j), lambda: (tracked(ln, int(W * sz), kind, col, W * 0.006) if kind == 'ui' else text_img(ln, W * sz, kind, col, glow=(cream, W * 0.012))))
         kj = ease_out((c.lt - 0.2 - 0.1 * j) / 0.35)
         comp(c, im, W * 0.05 - (1 - kj) * W * 0.03, y, al * kj); y += im.height * (0.82 if kind != 'ui' else 1.6)
     right = e.o.get('right', 'فن الـedit|اللي من غير مجهود').split('|')
-    y = H * float(e.o.get('right_y', 0.715))
+    y = H * float(e.o.get('right_y', 0.715)) + (0 if 'right_y' in e.o else dy)
     for j, ln in enumerate(right):
         im = cached(e, ('r', j), lambda: text_img(ln, W * 0.058, 'didonei', ink, glow=(cream, W * 0.01)))
         kj = ease_out((c.lt - 0.45 - 0.1 * j) / 0.35)
@@ -1921,7 +1975,7 @@ def glass_bento(c, e):
         b, suf, dp = num_parts(kv); v = b * ease_out((c.lt - 0.45) / 0.8)
         d.text((tw * 0.1, th * 0.18), f'{v:.{dp}f}{suf}', font=font('uib', th * 0.36), fill=(255, 255, 255, 255))
         d.text((tw * 0.1, th * 0.7), kl.upper(), font=font('mono', th * 0.1), fill=(255, 255, 255, 170))
-    bv, bl = (e.o.get('bars', '197|140|124|83|50::أعلى الريلز · K مشاهدة').split('::') + [''])[:2]; vals = [num_parts(v)[0] for v in bv.split('|')]
+    bv, bl = (e.o.get('bars', '197|140|124|83|50::أعلى الريلز · ألف مشاهدة').split('::') + [''])[:2]; vals = [num_parts(v)[0] for v in bv.split('|')]
     def dr_bars(t, d, tw, th):
         d.text((tw * 0.1, th * 0.06), bl.upper(), font=font('mono', tw * 0.055), fill=(255, 255, 255, 170))
         n = len(vals); bw = tw * 0.8 / n; top, base = th * 0.2, th * 0.88; mx = max(vals)
@@ -1929,7 +1983,7 @@ def glass_bento(c, e):
             kk = ease_out((c.lt - 0.4 - 0.08 * j) / 0.5); hgt = (base - top) * v / mx * kk; x = tw * 0.1 + j * bw
             d.rounded_rectangle([x + bw * 0.14, base - hgt, x + bw * 0.86, base], int(bw * 0.18), fill=(green if j == 0 else (255, 255, 255)) + (255 if j == 0 else 150,))
             if kk > 0.6: d.text((x + bw / 2, base - hgt - tw * 0.02), f'{v:g}', font=font('uib', tw * 0.06), fill=(255, 255, 255, 230), anchor='md')
-    tw = W * 0.25; gap = W * 0.02; ty = max(H * 0.5, c.fy + c.fw * 1.1)
+    tw = W * 0.25; gap = W * 0.02; ty = min(max(H * 0.5, c.fy + c.fw * 1.1), H * 0.98 - tw * 1.56 - gap)  # keep the lowest tile on screen
     tile(0, W * 0.15, ty + tw * 0.5, tw, tw, dr_donut)
     tile(1, W * 0.15, ty + tw + gap + tw * 0.28, tw, tw * 0.56, dr_kpi)
     tile(2, W * 0.85, ty + tw * 0.65, tw, tw * 1.3, dr_bars)
